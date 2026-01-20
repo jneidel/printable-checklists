@@ -1,0 +1,59 @@
+#! /bin/sh
+
+TEMP_MD=$(mktemp --suffix .md)
+TEMP_HTML=$(mktemp --suffix .html)
+
+if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ "$1" = "help" ] || [ -z "$1" ]; then
+  cat <<EOF
+$ transform MD_INPUT
+Transform markdown file into two A5 pdfs
+
+Parameters:
+  \$1: markdown input file, w/ or w/o file extension
+
+Example:
+  $ transform going-to-berlin.md
+  $ transform going-to-berlin
+EOF
+  exit
+fi
+
+hash md2html wkhtmltopdf pdftk pdf2ps psnup || exit 127
+
+INPUT="${1%%.*}"
+MD_SOURCE_FILE="$INPUT.md"
+PDF_OUT="$INPUT.pdf"
+
+cat $MD_SOURCE_FILE | sed 's|^-|<br>|' >$TEMP_MD
+
+cat <<EOF >$TEMP_HTML
+<head>
+<style>
+h2 {
+  margin-bottom: -25px;
+}
+h3 {
+  margin-bottom: -25px;
+}
+body {
+  background-color: white;
+}
+</style>
+</head>
+EOF
+md2html $TEMP_MD >>$TEMP_HTML
+echo $TEMP_HTML
+sed -i 's|<br>|<br>\&#x25a2;|; s|<code>-&gt;</code>|\&#x21a0;|; s|<code>&lt;-</code>|\&#x219e;|' $TEMP_HTML
+OUT_A5=$(mktemp --suffix .pdf)
+
+to_a4() {
+  local file=$OUT_A5
+  local out=$PDF_OUT
+  pdftk A=$file B=$file cat A1 B1 output - \
+    | pdf2ps -dLanguageLevel=3 - - \
+    | psnup -2 -Pa5 -pa4 \
+    | ps2pdf -dCompatibility=1.4 - "$out"
+}
+
+wkhtmltopdf --page-size A5 --minimum-font-size 24 $TEMP_HTML $OUT_A5
+to_a4
